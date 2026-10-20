@@ -86,6 +86,7 @@
     .cover-sub { font-family: var(--serif); font-size: clamp(1.3rem, 1.9vw, 1.7rem); font-weight: 300; font-style: italic; line-height: 1.4; color: var(--text-dim); max-width: 500px; }
     .cover-desc { color: var(--text-dim); font-size: 13px; line-height: 1.8; max-width: 460px; }
     .cover-art { position: relative; aspect-ratio: 1; background: #000; border: 1px solid var(--line); overflow: hidden; max-width: 520px; margin-left: auto; width: 100%; }
+    
     .canvas-slot { position: absolute; inset: 0; overflow: hidden; }
     .canvas-slot canvas {
       display: block !important;
@@ -94,6 +95,7 @@
       width: 100% !important; height: 100% !important;
       max-width: 100% !important; max-height: 100% !important;
     }
+    
     .cover-foot { display: grid; grid-template-columns: repeat(3, 1fr); gap: 40px; padding-top: 32px; border-top: 1px solid var(--line); font-family: var(--mono); font-size: 10px; letter-spacing: 0.22em; text-transform: uppercase; color: var(--text-faint); }
     .cover-foot .k { display: block; color: var(--gold-soft); margin-bottom: 8px; }
     .cover-foot .v { color: var(--text-dim); letter-spacing: 0.1em; line-height: 1.7; }
@@ -708,20 +710,6 @@
 <script>
 // ============================================================
 // JAPANESE PATTERNS — GENERATIVE MOTIF COMPOSITIONS
-//
-// Same seed → many surfaces:
-//   • Cover, Plate, Frame — same seed
-//   • All 4 surfaces (Print, Scarf, Textile, Wall) — same seed
-//   • Archive — 8 unique seeds
-//
-// Rectangular surfaces tile the square composition to fill.
-//
-// Generative engine (preserved from source):
-//   • 60 × 60 tile grid
-//   • 8 traditional Japanese motifs
-//   • 6 curated soft palettes
-//   • 3 transparency levels
-//   • Subtle gradient + occasional outline
 // ============================================================
 
 const prefix = 'Japanese-Patterns';
@@ -780,13 +768,9 @@ const PALETTES = [
 
 // ============================================================
 // SKETCH FACTORY
-// tile: { cols, rows } — repeat the square composition N times
 // ============================================================
-function makeSketch({ slotId, seedValue, isMaster, maxFrames, tile }) {
+function makeSketch({ slotId, seedValue, isMaster, maxFrames }) {
   const stopAfter = maxFrames || Infinity;
-  const tileCols = (tile && tile.cols) || 1;
-  const tileRows = (tile && tile.rows) || 1;
-
   let canvasW = 0;
   let canvasH = 0;
   let frameCount = 0;
@@ -838,32 +822,20 @@ function makeSketch({ slotId, seedValue, isMaster, maxFrames, tile }) {
         return;
       }
 
-      // Tile composition
-      const tileW = canvasW / tileCols;
-      const tileH = canvasH / tileRows;
-      const tileSize = Math.min(tileW, tileH);
-
-      for (let ty = 0; ty < tileRows; ty++) {
-        for (let tx = 0; tx < tileCols; tx++) {
-          const ox = tx * tileW + (tileW - tileSize) / 2;
-          const oy = ty * tileH + (tileH - tileSize) / 2;
-
-          p.push();
-          p.translate(ox, oy);
-          drawComposition(p, tileSize, seedValue);
-          p.pop();
-        }
-      }
-
+      // Directly draw the composition to fill the entire canvas exactly
+      drawComposition(p, canvasW, canvasH, seedValue);
       frameCount++;
     };
   };
 
-  // ---- Draw the Japanese-pattern composition into a square of side `size` ----
-  function drawComposition(p, size, seedValue) {
+  // ---- Draw the Japanese-pattern composition to fill the canvas ----
+  function drawComposition(p, w, h, seedValue) {
     const sr = new SeededRandom(seedValue);
-    const cs = size;
-    const cellSize = cs / GRID_SIZE;
+    
+    // Cell size based on actual width/height
+    const cellW = w / GRID_SIZE;
+    const cellH = h / GRID_SIZE;
+
     const patternType = sr.int(0, 7);
     const palette = sr.pick(PALETTES);
 
@@ -936,10 +908,10 @@ function makeSketch({ slotId, seedValue, isMaster, maxFrames, tile }) {
     // ---- Subtle gradient ----
     p.push();
     p.noStroke();
-    for (let i = 0; i < cs; i += 2) {
-      const alpha = (i / cs) * 0.03 + 0.02;
+    for (let i = 0; i < h; i += 2) {
+      const alpha = (i / h) * 0.03 + 0.02;
       p.fill(bgHue, bgSaturation - 5, bgBrightness - 5, alpha);
-      p.rect(0, i, cs, 2);
+      p.rect(0, i, w, 2);
     }
     p.pop();
 
@@ -954,22 +926,29 @@ function makeSketch({ slotId, seedValue, isMaster, maxFrames, tile }) {
 
           p.fill(c[0], c[1], c[2], alpha);
 
-          const x = i * cellSize;
-          const y = j * cellSize;
+          const x = i * cellW;
+          const y = j * cellH;
 
           const scale = 0.95;
-          const scaledCellSize = cellSize * scale;
-          const offset = (cellSize - scaledCellSize) / 2;
+          const scaledCellW = cellW * scale;
+          const scaledCellH = cellH * scale;
+          
+          const offsetX = (cellW - scaledCellW) / 2;
+          const offsetY = (cellH - scaledCellH) / 2;
+          
+          const cx = x + cellW / 2;
+          const cy = y + cellH / 2;
+          const minDim = Math.min(scaledCellW, scaledCellH);
 
           switch (patternType) {
-            case 0: drawWave(p, x + cellSize / 2, y + cellSize / 2, scaledCellSize); break;
-            case 1: drawHexagon(p, x + cellSize / 2, y + cellSize / 2, scaledCellSize * 0.8); break;
-            case 2: drawCircle(p, x + cellSize / 2, y + cellSize / 2, scaledCellSize * 0.7, colors, TRANSPARENCY_LEVELS); break;
-            case 3: drawHexagon(p, x + cellSize / 2, y + cellSize / 2, scaledCellSize * 0.6); break;
-            case 4: p.rect(x + offset, y + offset, scaledCellSize, scaledCellSize); break;
-            case 5: drawScale(p, x + cellSize / 2, y + cellSize / 2, scaledCellSize); break;
-            case 6: p.rect(x + offset, y + offset, scaledCellSize * 0.5, scaledCellSize); break;
-            case 7: p.rect(x + offset, y + offset, scaledCellSize, scaledCellSize); break;
+            case 0: drawWave(p, cx, cy, minDim); break;
+            case 1: drawHexagon(p, cx, cy, minDim * 0.8); break;
+            case 2: drawCircle(p, cx, cy, minDim * 0.7, colors, TRANSPARENCY_LEVELS); break;
+            case 3: drawHexagon(p, cx, cy, minDim * 0.6); break;
+            case 4: p.rect(x + offsetX, y + offsetY, scaledCellW, scaledCellH); break;
+            case 5: drawScale(p, cx, cy, minDim); break;
+            case 6: p.rect(x + offsetX, y + offsetY, scaledCellW * 0.5, scaledCellH); break;
+            case 7: p.rect(x + offsetX, y + offsetY, scaledCellW, scaledCellH); break;
           }
         }
       }
@@ -983,13 +962,17 @@ function makeSketch({ slotId, seedValue, isMaster, maxFrames, tile }) {
       for (let i = 0; i < GRID_SIZE; i++) {
         for (let j = 0; j < GRID_SIZE; j++) {
           if (grid[i][j] === 1) {
-            const x = i * cellSize;
-            const y = j * cellSize;
+            const x = i * cellW;
+            const y = j * cellH;
+            const cx = x + cellW / 2;
+            const cy = y + cellH / 2;
+            const minDim = Math.min(cellW, cellH);
+            
             p.noFill();
             switch (patternType) {
-              case 1: drawHexagon(p, x + cellSize / 2, y + cellSize / 2, cellSize * 0.85); break;
-              case 3: drawHexagon(p, x + cellSize / 2, y + cellSize / 2, cellSize * 0.65); break;
-              case 5: drawScale(p, x + cellSize / 2, y + cellSize / 2, cellSize * 1.05); break;
+              case 1: drawHexagon(p, cx, cy, minDim * 0.85); break;
+              case 3: drawHexagon(p, cx, cy, minDim * 0.65); break;
+              case 5: drawScale(p, cx, cy, minDim * 1.05); break;
             }
           }
         }
@@ -1088,10 +1071,10 @@ function attachVisibilityObserver(p5Instance, element) {
   obs.observe(element);
 }
 
-function createLiveP5({ slotId, seedValue, isMaster, maxFrames, tile, onCreated }) {
+function createLiveP5({ slotId, seedValue, isMaster, maxFrames, onCreated }) {
   whenSlotReady(slotId, (slot) => {
     slot.querySelectorAll('canvas').forEach(c => c.remove());
-    const inst = new p5(makeSketch({ slotId, seedValue, isMaster, maxFrames, tile }), slot);
+    const inst = new p5(makeSketch({ slotId, seedValue, isMaster, maxFrames }), slot);
     inst._frozen = false;
     attachVisibilityObserver(inst, slot);
     if (onCreated) onCreated(inst);
@@ -1107,7 +1090,6 @@ function drawPlate() {
     seedValue: seed,
     isMaster: true,
     maxFrames: 2,
-    tile: { cols: 1, rows: 1 },
     onCreated: (inst) => { plateP5 = inst; }
   });
 }
@@ -1121,7 +1103,6 @@ function drawCover() {
     seedValue: seed,
     isMaster: false,
     maxFrames: 2,
-    tile: { cols: 1, rows: 1 },
     onCreated: (inst) => { coverP5 = inst; }
   });
 }
@@ -1135,19 +1116,18 @@ function drawFramedPlate() {
     seedValue: seed,
     isMaster: false,
     maxFrames: 2,
-    tile: { cols: 1, rows: 1 },
     onCreated: (inst) => { frameP5 = inst; }
   });
 }
 
 // ============================================================
-// SURFACES — same seed as plate, tiled to fill aspect ratio
+// SURFACES — same seed as plate, scaled to fill aspect ratio
 // ============================================================
 const surfaceDefs = [
-  { id: 'surfacePrint',   wrapId: 'wrap-surfacePrint',   tile: { cols: 1, rows: 1 } },
-  { id: 'surfaceScarf',   wrapId: 'wrap-surfaceScarf',   tile: { cols: 3, rows: 1 } },
-  { id: 'surfaceTextile', wrapId: 'wrap-surfaceTextile', tile: { cols: 2, rows: 2 } },
-  { id: 'surfaceWall',    wrapId: 'wrap-surfaceWall',    tile: { cols: 1, rows: 2 } }
+  { id: 'surfacePrint',   wrapId: 'wrap-surfacePrint' },
+  { id: 'surfaceScarf',   wrapId: 'wrap-surfaceScarf' },
+  { id: 'surfaceTextile', wrapId: 'wrap-surfaceTextile' },
+  { id: 'surfaceWall',    wrapId: 'wrap-surfaceWall' }
 ];
 
 function drawSurfaces() {
@@ -1176,8 +1156,7 @@ function drawSurfaces() {
           slotId: slot.id || (slot.id = def.id + '-slot'),
           seedValue: seed,
           isMaster: false,
-          maxFrames: 2,
-          tile: def.tile
+          maxFrames: 2
         }),
         slot
       );
@@ -1252,8 +1231,7 @@ function drawArchive() {
           slotId: 'archive-slot-' + i,
           seedValue: archiveSeeds[i],
           isMaster: false,
-          maxFrames: 2,
-          tile: { cols: 1, rows: 1 }
+          maxFrames: 2
         }),
         slot
       );
